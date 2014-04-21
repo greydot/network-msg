@@ -9,7 +9,7 @@ library
     Network.Socket.Msg
   other-modules:
     Network.Socket.Msg.Internal
-    Network.Socket.Msg.CMsgHdr
+    Network.Socket.Msg.CMsg
     Network.Socket.Msg.IOVec
     Network.Socket.Msg.MsgHdr
 

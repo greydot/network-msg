@@ -8,12 +8,12 @@ module Network.Socket.Msg.Internal
     , c_cmsg_data
     ) where
 
-import Network.Socket.Msg.CMsg (CMsg)
+import Network.Socket.Msg.CMsg (CMsgHdr)
 import Network.Socket.Msg.MsgHdr (MsgHdr)
 
-import Foreign.C.Types (CInt)
+import Foreign.C.Types (CInt(..))
 import Foreign.Ptr (Ptr)
-import System.Posix.Types (CSsize)
+import System.Posix.Types (CSsize(..))
 
 foreign import ccall unsafe "sendmsg"
   c_sendmsg :: CInt -> Ptr MsgHdr -> CInt -> IO CSsize
