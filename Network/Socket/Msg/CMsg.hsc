@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 module Network.Socket.Msg.CMsg
     ( CSockLen
     , CMsgHdr(..)
