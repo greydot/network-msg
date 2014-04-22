@@ -1,4 +1,4 @@
-module Network.Socket.Msg (CMsg(..),recvMsg) where
+module Network.Socket.Msg (CMsg(..),sendMsg,recvMsg) where
 
 import Network.Socket.Msg.CMsg
 import Network.Socket.Msg.Internal
@@ -9,7 +9,7 @@ import Control.Applicative
 import qualified Data.ByteString as B
 import Data.Maybe (isNothing, fromJust)
 import Network.Socket
-import Network.Socket.Internal (peekSockAddr,throwSocketErrorWaitRead)
+import Network.Socket.Internal (peekSockAddr,pokeSockAddr,sizeOfSockAddr,throwSocketErrorWaitRead,throwSocketErrorWaitWrite)
 import Foreign.Marshal.Alloc (alloca,allocaBytes)
 import Foreign.Storable (Storable(..),poke)
 import Foreign.Ptr (Ptr,plusPtr,nullPtr)
@@ -17,7 +17,7 @@ import Foreign.Ptr (Ptr,plusPtr,nullPtr)
 isNullPtr :: Ptr a -> Bool
 isNullPtr = (==) nullPtr
 
----- The buffer will be filled as follows:
+-- The buffer in both functions is filled as follows:
 -- -------------
 -- | Data (sz) |
 -- -------------
@@ -29,6 +29,40 @@ isNullPtr = (==) nullPtr
 -- -------------
 -- |  Aux Data |
 -- -------------
+
+sendMsg :: Socket -> B.ByteString -> SockAddr -> [CMsg] -> IO ()
+sendMsg sock@(MkSocket sockfd _ _ _ _) bytes sa cmsgs = allocaBytes bufSz $ \bufPtr -> do
+        let saPtr = plusPtr bufPtr $ B.length bytes
+        let iovPtr = plusPtr saPtr $ sizeOfSockAddr sa
+        let msgPtr = plusPtr iovPtr $ sizeOf (undefined :: IOVec)
+        let auxPtr = plusPtr msgPtr $ sizeOf (undefined :: MsgHdr)
+
+        let iovec = IOVec bufPtr (fromIntegral $ B.length bytes)
+        let msghdr = MsgHdr { msgName = saPtr
+                            , msgNameLen = fromIntegral $ sizeOfSockAddr sa
+                            , msgIov = iovPtr
+                            , msgIovLen = 1
+                            , msgControl = auxPtr
+                            , msgControlLen = fromIntegral auxSz
+                            , msgFlags = 0 }
+        pokeCMsgs auxPtr cmsgs
+        pokeSockAddr saPtr sa
+        poke msgPtr msghdr
+        poke iovPtr iovec
+        
+        _ <-
+# if !defined(__HUGS__) 
+            throwSocketErrorWaitWrite sock "sendMsg" $
+# endif
+                c_sendmsg sockfd msgPtr 0
+        return ()
+    where
+        auxSz = sum $ map cmsgSpace cmsgs
+        bufSz = sum [auxSz, sizeOfSockAddr sa, B.length bytes, sizeOf (undefined :: MsgHdr), sizeOf (undefined :: IOVec)]
+        pokeCMsgs :: Ptr CMsgHdr -> [CMsg] -> IO ()
+        pokeCMsgs _ [] = return ()
+        pokeCMsgs ptr (c:cs) = pokeCMsg ptr c >> pokeCMsgs (plusPtr ptr $ cmsgSpace c) cs
+
 recvMsg :: Socket -> Int -> IO (B.ByteString, SockAddr, [CMsg])
 recvMsg sock@(MkSocket sockfd _ _ _ _) sz = allocaBytes bufSz $ \bufPtr -> do
         let addrPtr = plusPtr bufPtr addrSz

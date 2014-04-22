@@ -7,6 +7,7 @@ module Network.Socket.Msg.CMsg
     , c_cmsg_firsthdr
     , c_cmsg_nexthdr
     , c_cmsg_data
+    , cmsgSpace
     , peekCMsg
     , pokeCMsg
     ) where
@@ -18,7 +19,7 @@ import Network.Socket.Msg.MsgHdr (MsgHdr)
 
 import qualified Data.ByteString as B
 import Data.Maybe (isNothing,fromJust)
-import Foreign.C.Types (CUInt(..),CInt(..))
+import Foreign.C.Types (CUInt(..),CInt(..),CSize(..))
 import Foreign.Marshal.Utils (copyBytes)
 import Foreign.Ptr (Ptr,castPtr,nullPtr)
 import Foreign.Storable (Storable(..))
@@ -63,6 +64,13 @@ foreign import ccall unsafe "cmsg_nexthdr"
 
 foreign import ccall unsafe "cmsg_data"
   c_cmsg_data :: Ptr CMsgHdr -> Ptr ()
+
+foreign import ccall unsafe "cmsg_space"
+  c_cmsg_space :: CSize -> CSize
+
+cmsgSpace :: CMsg -> Int
+cmsgSpace = spc . B.length . cmsgData
+    where spc = fromIntegral . c_cmsg_space . fromIntegral
 
 cmsgExtractData :: Ptr CMsgHdr -> IO (Maybe B.ByteString)
 cmsgExtractData p = do

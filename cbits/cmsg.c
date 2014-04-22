@@ -16,3 +16,7 @@ void *cmsg_data(struct cmsghdr *cmsg)
     return (void*)CMSG_DATA(cmsg);
 }
 
+size_t cmsg_space(size_t len)
+{
+    return CMSG_SPACE(len);
+}
