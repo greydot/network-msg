@@ -32,6 +32,12 @@ data CMsg = CMsg
     , cmsgData  :: B.ByteString
     }
 
+instance Show CMsg where
+    show cmsg = concat ["(",
+                        "Level: ", show $ cmsgLevel cmsg, ", ",
+                        "Type: ", show $ cmsgType cmsg, ", ",
+                        "Data: ", show $ cmsgData cmsg, ")"]
+
 data CMsgHdr = CMsgHdr
     { cmsgLen       :: CSockLen
     , cmsghdrLevel  :: CInt

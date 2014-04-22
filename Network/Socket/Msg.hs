@@ -88,7 +88,7 @@ recvMsg sock@(MkSocket sockfd _ _ _ _) sz = allocaBytes bufSz $ \bufPtr -> do
             c_recvmsg sockfd mhdrPtr 0)
         (,,) <$> B.packCStringLen (bufPtr,rsz)
              <*> peekSockAddr addrPtr
-             <*> extractCMsgs msghdr
+             <*> extractCMsgs mhdrPtr
     where
         -- Assume that 1024 bytes is enough for auxillary data
         auxSz = 1024
@@ -96,9 +96,8 @@ recvMsg sock@(MkSocket sockfd _ _ _ _) sz = allocaBytes bufSz $ \bufPtr -> do
         addrSz = 16
         bufSz = sum [sz, auxSz, addrSz, sizeOf (undefined :: MsgHdr), sizeOf (undefined :: IOVec)]
 
-extractCMsgs :: MsgHdr -> IO [CMsg]
-extractCMsgs msg = alloca $ \pMsg ->
-                   poke pMsg msg >> extractCMsgs' pMsg (c_cmsg_firsthdr pMsg) []
+extractCMsgs :: Ptr MsgHdr -> IO [CMsg]
+extractCMsgs pMsg = extractCMsgs' pMsg (c_cmsg_firsthdr pMsg) []
     where
         extractCMsgs' pMsg pCMsg resList
             | isNullPtr pCMsg = return resList
