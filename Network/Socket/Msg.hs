@@ -10,7 +10,7 @@ import qualified Data.ByteString as B
 import Data.Maybe (isNothing, fromJust)
 import Network.Socket
 import Network.Socket.Internal (peekSockAddr,pokeSockAddr,sizeOfSockAddr,throwSocketErrorWaitRead,throwSocketErrorWaitWrite)
-import Foreign.Marshal.Alloc (alloca,allocaBytes)
+import Foreign.Marshal.Alloc (allocaBytes)
 import Foreign.Storable (Storable(..),poke)
 import Foreign.Ptr (Ptr,plusPtr,nullPtr)
 
@@ -97,14 +97,13 @@ recvMsg sock@(MkSocket sockfd _ _ _ _) sz = allocaBytes bufSz $ \bufPtr -> do
         bufSz = sum [sz, auxSz, addrSz, sizeOf (undefined :: MsgHdr), sizeOf (undefined :: IOVec)]
 
 extractCMsgs :: Ptr MsgHdr -> IO [CMsg]
-extractCMsgs pMsg = extractCMsgs' pMsg (c_cmsg_firsthdr pMsg) []
+extractCMsgs pMsg = extractCMsgs' (c_cmsg_firsthdr pMsg) []
     where
-        extractCMsgs' pMsg pCMsg resList
+        extractCMsgs' pCMsg resList
             | isNullPtr pCMsg = return resList
             | otherwise = do
                 cmsg <- peekCMsg pCMsg
-                extractCMsgs' pMsg
-                              (c_cmsg_nexthdr pMsg pCMsg)
+                extractCMsgs' (c_cmsg_nexthdr pMsg pCMsg)
                               (if isNothing cmsg
                                   then resList
                                   else (fromJust cmsg):resList)
