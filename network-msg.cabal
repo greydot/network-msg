@@ -12,9 +12,10 @@ description: Bindings to sendmsg and recvmsg POSIX functions.
 library
   exposed-modules:
     Network.Socket.Msg
+    Network.Socket.Msg.CMsg
   other-modules:
     Network.Socket.Msg.Internal
-    Network.Socket.Msg.CMsg
+    Network.Socket.Msg.CMsgHdr
     Network.Socket.Msg.IOVec
     Network.Socket.Msg.MsgHdr
 
@@ -22,6 +23,7 @@ library
 
   build-depends:
     base >= 4 && < 5,
+    binary,
     bytestring,
     network,
     unix

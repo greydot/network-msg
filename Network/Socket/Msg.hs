@@ -1,6 +1,13 @@
-module Network.Socket.Msg (CMsg(..),sendMsg,recvMsg) where
+module Network.Socket.Msg
+    ( CMsg(..)
+    , CMsgable (..)
+    , filterCMsgs
+    , sendMsg
+    , recvMsg
+    ) where
 
 import Network.Socket.Msg.CMsg
+import Network.Socket.Msg.CMsgHdr
 import Network.Socket.Msg.Internal
 import Network.Socket.Msg.IOVec
 import Network.Socket.Msg.MsgHdr

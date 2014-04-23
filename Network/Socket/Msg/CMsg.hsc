@@ -1,30 +1,21 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
-
+{-# LANGUAGE CPP,ScopedTypeVariables #-}
 module Network.Socket.Msg.CMsg
-    ( CSockLen
-    , CMsg(..)
-    , CMsgHdr(..)
-    , c_cmsg_firsthdr
-    , c_cmsg_nexthdr
-    , c_cmsg_data
-    , cmsgSpace
-    , peekCMsg
-    , pokeCMsg
+    ( CMsg(..)
+    , CMsgable(..)
+    , filterCMsgs
+#ifdef IP_PKTINFO
+    , IpPktInfo(..)
+#endif
     ) where
 
-#include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 
-import Network.Socket.Msg.MsgHdr (MsgHdr)
-
+import Control.Applicative
+import Data.Binary
 import qualified Data.ByteString as B
-import Data.Maybe (isNothing,fromJust)
-import Foreign.C.Types (CUInt(..),CInt(..),CSize(..))
-import Foreign.Marshal.Utils (copyBytes)
-import Foreign.Ptr (Ptr,castPtr,nullPtr)
-import Foreign.Storable (Storable(..))
-
-type CSockLen = CUInt   -- The way it is defined somewhere in bits/types.h
+import Data.ByteString.Lazy (fromStrict,toStrict)
+import Network.Socket (HostAddress)
 
 data CMsg = CMsg
     { cmsgLevel :: Int
@@ -38,70 +29,53 @@ instance Show CMsg where
                         "Type: ", show $ cmsgType cmsg, ", ",
                         "Data: ", show $ cmsgData cmsg, ")"]
 
-data CMsgHdr = CMsgHdr
-    { cmsgLen       :: CSockLen
-    , cmsghdrLevel  :: CInt
-    , cmsghdrType   :: CInt
+-- |Class for binary structures that can be used as control messages (cmsg(3)).
+-- 
+-- Complete definition requires for a type to be an instance of Binary class,
+-- as well as to provide getCMsgLevel and getCMsgType methods.
+--
+-- Note that the argument of getCMsgLevel and getCMsgType methods should not
+-- be used as it might be undefined.
+class Binary a => CMsgable a where
+    getCMsgLevel    :: a -> Int
+    getCMsgType     :: a -> Int
+
+    toCMsg :: a -> CMsg
+    toCMsg x = CMsg { cmsgLevel = getCMsgLevel x
+                    , cmsgType = getCMsgType x
+                    , cmsgData = toStrict $ encode x }
+
+    -- XXX: Find a way to check type and level values in here
+    fromCMsg :: CMsg -> Maybe a
+    fromCMsg cmsg = case decodeOrFail (fromStrict $ cmsgData cmsg) of
+                        Left _ -> Nothing
+                        Right (_,_,x) -> Just x
+
+-- |Filter specific kind of control messages.
+-- 
+-- Example: filterCMsgs (undefined :: IpPktInfo) cmsgs
+filterCMsgs :: (CMsgable a) => a -> [CMsg] -> [CMsg]
+filterCMsgs x = filter $ \c -> (cmsgType c == getCMsgType x) && (cmsgLevel c == getCMsgLevel x)
+
+#ifdef IP_PKTINFO
+data IpPktInfo = IpPktInfo
+    { ipi_ifindex   :: Int
+    , ipi_spec_dst  :: HostAddress
+    , ipi_addr      :: HostAddress
     }
 
-instance Storable CMsgHdr where
-    sizeOf _ = (#const sizeof(struct cmsghdr))
-    alignment _ = alignment (undefined :: CInt)
+instance Binary IpPktInfo where
+    put i = do
+        -- XXX: Assume that sizeof(int) == 4
+        put $ ((fromIntegral $ ipi_ifindex i) :: Word32)
+        put $ ipi_spec_dst i
+        put $ ipi_addr i
+    get = IpPktInfo <$> fmap fromIntegral (get :: Get Word32)
+                    <*> get
+                    <*> get
 
-    peek p = do
-        len <- (#peek struct cmsghdr, cmsg_len) p
-        level <- (#peek struct cmsghdr, cmsg_level) p
-        t <- (#peek struct cmsghdr, cmsg_type) p
-        return $ CMsgHdr len level t
+instance CMsgable IpPktInfo where
+    getCMsgLevel    _ = #const IPPROTO_IP
+    getCMsgType     _ = #const IP_PKTINFO
 
-    poke p cmh = do
-        (#poke struct cmsghdr, cmsg_len) p (cmsgLen cmh)
-        (#poke struct cmsghdr, cmsg_level) p (cmsghdrLevel cmh)
-        (#poke struct cmsghdr, cmsg_type) p (cmsghdrType cmh)
-
--- The manual says the following functions (actually macros)
--- are constant and thus we do not have to use IO monad.
-
-foreign import ccall unsafe "cmsg_firsthdr"
-  c_cmsg_firsthdr :: Ptr MsgHdr -> Ptr CMsgHdr
-
-foreign import ccall unsafe "cmsg_nexthdr"
-  c_cmsg_nexthdr :: Ptr MsgHdr -> Ptr CMsgHdr -> Ptr CMsgHdr
-
-foreign import ccall unsafe "cmsg_data"
-  c_cmsg_data :: Ptr CMsgHdr -> Ptr ()
-
-foreign import ccall unsafe "cmsg_space"
-  c_cmsg_space :: CSize -> CSize
-
-cmsgSpace :: CMsg -> Int
-cmsgSpace = spc . B.length . cmsgData
-    where spc = fromIntegral . c_cmsg_space . fromIntegral
-
-cmsgExtractData :: Ptr CMsgHdr -> IO (Maybe B.ByteString)
-cmsgExtractData p = do
-    let dataPtr = castPtr $ c_cmsg_data p
-    dataLen <- return . cmsgLen =<< peek p
-    if dataPtr == nullPtr
-        then return Nothing
-        else return.Just =<< B.packCStringLen (dataPtr, fromIntegral dataLen)
-
-peekCMsg :: Ptr CMsgHdr -> IO (Maybe CMsg)
-peekCMsg pCMsgHdr =
-        peek pCMsgHdr >>= \cmsghdr ->
-        cmsgExtractData pCMsgHdr >>= \dat ->
-        return $ if isNothing dat
-            then Nothing
-            else Just CMsg { cmsgLevel = fromIntegral $ cmsghdrLevel cmsghdr
-                           , cmsgType = fromIntegral $ cmsghdrType cmsghdr
-                           , cmsgData = fromJust dat }
-
-pokeCMsg :: Ptr CMsgHdr -> CMsg -> IO ()
-pokeCMsg pHdr cmsg = do
-        poke pHdr cmsghdr
-        let dptr = castPtr $ c_cmsg_data pHdr
-        B.useAsCStringLen (cmsgData cmsg) $ \(bptr,len) -> copyBytes dptr bptr len
-    where
-        cmsghdr = CMsgHdr { cmsgLen = fromIntegral $ B.length $ cmsgData cmsg
-                          , cmsghdrLevel = fromIntegral $ cmsgLevel cmsg
-                          , cmsghdrType = fromIntegral $ cmsgType cmsg }
+# endif
