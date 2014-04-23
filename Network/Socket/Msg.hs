@@ -17,19 +17,23 @@ import Foreign.Ptr (Ptr,plusPtr,nullPtr)
 isNullPtr :: Ptr a -> Bool
 isNullPtr = (==) nullPtr
 
--- The buffer in both functions is filled as follows:
--- -------------
--- | Data (sz) |
--- -------------
--- |  SockAddr |
--- -------------
--- |   IOVec   |
--- -------------
--- |   MsgHdr  |
--- -------------
--- |  Aux Data |
--- -------------
+{-
+The buffer in both functions is filled as follows:
+-------------
+| Data (sz) |
+-------------
+|  SockAddr |
+-------------
+|   IOVec   |
+-------------
+|   MsgHdr  |
+-------------
+|  Aux Data |
+-------------
+-}
 
+-- |Sends the data contained in the bytestring to the specified address.
+-- The last argument is a list of control parameters (see cmsg(3) for details).
 sendMsg :: Socket -> B.ByteString -> SockAddr -> [CMsg] -> IO ()
 sendMsg sock@(MkSocket sockfd _ _ _ _) bytes sa cmsgs = allocaBytes bufSz $ \bufPtr -> do
         let saPtr = plusPtr bufPtr $ B.length bytes
@@ -63,6 +67,7 @@ sendMsg sock@(MkSocket sockfd _ _ _ _) bytes sa cmsgs = allocaBytes bufSz $ \buf
         pokeCMsgs _ [] = return ()
         pokeCMsgs ptr (c:cs) = pokeCMsg ptr c >> pokeCMsgs (plusPtr ptr $ cmsgSpace c) cs
 
+-- |Receive data and put it into a bytestring.
 recvMsg :: Socket -> Int -> IO (B.ByteString, SockAddr, [CMsg])
 recvMsg sock@(MkSocket sockfd _ _ _ _) sz = allocaBytes bufSz $ \bufPtr -> do
         let addrPtr = plusPtr bufPtr addrSz
