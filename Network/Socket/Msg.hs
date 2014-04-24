@@ -49,7 +49,6 @@ sendMsg sock@(MkSocket sockfd _ _ _ _) bytes sa cmsgs = allocaBytes bufSz $ \buf
         let msgPtr = plusPtr iovPtr $ sizeOf (undefined :: IOVec)
         let auxPtr = plusPtr msgPtr $ sizeOf (undefined :: MsgHdr)
 
-        let iovec = IOVec bufPtr (fromIntegral $ B.length bytes)
         let msghdr = MsgHdr { msgName = saPtr
                             , msgNameLen = fromIntegral $ sizeOfSockAddr sa
                             , msgIov = iovPtr
