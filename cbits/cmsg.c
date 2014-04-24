@@ -20,3 +20,8 @@ size_t cmsg_space(size_t len)
 {
     return CMSG_SPACE(len);
 }
+
+size_t cmsg_len(size_t len)
+{
+    return CMSG_LEN(len);
+}

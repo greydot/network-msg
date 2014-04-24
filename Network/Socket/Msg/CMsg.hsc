@@ -13,6 +13,8 @@ module Network.Socket.Msg.CMsg
 
 import Control.Applicative
 import Data.Binary
+import Data.Binary.Get (getWord32host)
+import Data.Binary.Put (putWord32host)
 import qualified Data.ByteString as B
 import Data.ByteString.Lazy (fromStrict,toStrict)
 import Network.Socket (HostAddress)
@@ -59,20 +61,20 @@ filterCMsgs x = filter $ \c -> (cmsgType c == getCMsgType x) && (cmsgLevel c == 
 
 #ifdef IP_PKTINFO
 data IpPktInfo = IpPktInfo
-    { ipi_ifindex   :: Int
+    { ipi_ifindex   :: Word32
     , ipi_spec_dst  :: HostAddress
     , ipi_addr      :: HostAddress
-    }
+    } deriving (Show)
 
 instance Binary IpPktInfo where
     put i = do
         -- XXX: Assume that sizeof(int) == 4
-        put $ ((fromIntegral $ ipi_ifindex i) :: Word32)
-        put $ ipi_spec_dst i
-        put $ ipi_addr i
-    get = IpPktInfo <$> fmap fromIntegral (get :: Get Word32)
-                    <*> get
-                    <*> get
+        putWord32host $ ipi_ifindex i
+        putWord32host $ ipi_spec_dst i
+        putWord32host $ ipi_addr i
+    get = IpPktInfo <$> getWord32host
+                    <*> getWord32host
+                    <*> getWord32host
 
 instance CMsgable IpPktInfo where
     getCMsgLevel    _ = #const IPPROTO_IP

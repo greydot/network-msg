@@ -13,13 +13,14 @@ import Network.Socket.Msg.IOVec
 import Network.Socket.Msg.MsgHdr
 
 import Control.Applicative
+import Control.Monad (void)
 import qualified Data.ByteString as B
 import Data.Maybe (isNothing, fromJust)
 import Network.Socket
 import Network.Socket.Internal (peekSockAddr,pokeSockAddr,sizeOfSockAddr,throwSocketErrorWaitRead,throwSocketErrorWaitWrite)
 import Foreign.Marshal.Alloc (allocaBytes)
 import Foreign.Storable (Storable(..),poke)
-import Foreign.Ptr (Ptr,plusPtr,nullPtr)
+import Foreign.Ptr (Ptr,castPtr,plusPtr,nullPtr)
 
 isNullPtr :: Ptr a -> Bool
 isNullPtr = (==) nullPtr
@@ -43,7 +44,7 @@ The buffer in both functions is filled as follows:
 -- The last argument is a list of control parameters (see cmsg(3) for details).
 sendMsg :: Socket -> B.ByteString -> SockAddr -> [CMsg] -> IO ()
 sendMsg sock@(MkSocket sockfd _ _ _ _) bytes sa cmsgs = allocaBytes bufSz $ \bufPtr -> do
-        let saPtr = plusPtr bufPtr $ B.length bytes
+        let saPtr = castPtr bufPtr
         let iovPtr = plusPtr saPtr $ sizeOfSockAddr sa
         let msgPtr = plusPtr iovPtr $ sizeOf (undefined :: IOVec)
         let auxPtr = plusPtr msgPtr $ sizeOf (undefined :: MsgHdr)
@@ -56,23 +57,19 @@ sendMsg sock@(MkSocket sockfd _ _ _ _) bytes sa cmsgs = allocaBytes bufSz $ \buf
                             , msgControl = auxPtr
                             , msgControlLen = fromIntegral auxSz
                             , msgFlags = 0 }
-        pokeCMsgs auxPtr cmsgs
-        pokeSockAddr saPtr sa
         poke msgPtr msghdr
-        poke iovPtr iovec
-        
-        _ <-
+        pokeCMsgs msgPtr cmsgs
+        pokeSockAddr saPtr sa
+
+        void $
 # if !defined(__HUGS__) 
             throwSocketErrorWaitWrite sock "sendMsg" $
 # endif
-                c_sendmsg sockfd msgPtr 0
-        return ()
+                B.useAsCStringLen bytes $ \(p,len) ->
+                    poke iovPtr (IOVec p $ fromIntegral len) >> c_sendmsg sockfd msgPtr 0
     where
         auxSz = sum $ map cmsgSpace cmsgs
-        bufSz = sum [auxSz, sizeOfSockAddr sa, B.length bytes, sizeOf (undefined :: MsgHdr), sizeOf (undefined :: IOVec)]
-        pokeCMsgs :: Ptr CMsgHdr -> [CMsg] -> IO ()
-        pokeCMsgs _ [] = return ()
-        pokeCMsgs ptr (c:cs) = pokeCMsg ptr c >> pokeCMsgs (plusPtr ptr $ cmsgSpace c) cs
+        bufSz = sum [auxSz, sizeOfSockAddr sa, sizeOf (undefined :: MsgHdr), sizeOf (undefined :: IOVec)]
 
 -- |Receive data and put it into a bytestring.
 recvMsg :: Socket -> Int -> IO (B.ByteString, SockAddr, [CMsg])

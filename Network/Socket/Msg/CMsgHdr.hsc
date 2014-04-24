@@ -10,14 +10,16 @@ module Network.Socket.Msg.CMsgHdr
     , cmsgSpace
     , peekCMsg
     , pokeCMsg
+    , pokeCMsgs
     ) where
 
 #include <sys/types.h>
 #include <sys/socket.h>
 
 import Network.Socket.Msg.CMsg (CMsg(..))
-import Network.Socket.Msg.MsgHdr (MsgHdr)
+import Network.Socket.Msg.MsgHdr (MsgHdr(..))
 
+import Control.Applicative
 import qualified Data.ByteString as B
 import Data.Maybe (isNothing,fromJust)
 import Foreign.C.Types (CUInt(..),CInt(..),CSize(..))
@@ -28,7 +30,7 @@ import Foreign.Storable (Storable(..))
 type CSockLen = CUInt   -- The way it is defined somewhere in bits/types.h
 
 data CMsgHdr = CMsgHdr
-    { cmsgLen       :: CSockLen
+    { cmsghdrLen       :: CSockLen
     , cmsghdrLevel  :: CInt
     , cmsghdrType   :: CInt
     }
@@ -44,7 +46,7 @@ instance Storable CMsgHdr where
         return $ CMsgHdr len level t
 
     poke p cmh = do
-        (#poke struct cmsghdr, cmsg_len) p (cmsgLen cmh)
+        (#poke struct cmsghdr, cmsg_len) p (cmsghdrLen cmh)
         (#poke struct cmsghdr, cmsg_level) p (cmsghdrLevel cmh)
         (#poke struct cmsghdr, cmsg_type) p (cmsghdrType cmh)
 
@@ -63,14 +65,21 @@ foreign import ccall unsafe "cmsg_data"
 foreign import ccall unsafe "cmsg_space"
   c_cmsg_space :: CSize -> CSize
 
+foreign import ccall unsafe "cmsg_len"
+  c_cmsg_len :: CSize -> CSize
+
 cmsgSpace :: CMsg -> Int
 cmsgSpace = spc . B.length . cmsgData
     where spc = fromIntegral . c_cmsg_space . fromIntegral
 
+cmsgLen :: CMsg -> Int
+cmsgLen = len . B.length . cmsgData
+    where len = fromIntegral . c_cmsg_len . fromIntegral
+
 cmsgExtractData :: Ptr CMsgHdr -> IO (Maybe B.ByteString)
 cmsgExtractData p = do
     let dataPtr = castPtr $ c_cmsg_data p
-    dataLen <- return . cmsgLen =<< peek p
+    dataLen <- cmsghdrLen <$> peek p
     if dataPtr == nullPtr
         then return Nothing
         else return.Just =<< B.packCStringLen (dataPtr, fromIntegral dataLen)
@@ -91,6 +100,18 @@ pokeCMsg pHdr cmsg = do
         let dptr = castPtr $ c_cmsg_data pHdr
         B.useAsCStringLen (cmsgData cmsg) $ \(bptr,len) -> copyBytes dptr bptr len
     where
-        cmsghdr = CMsgHdr { cmsgLen = fromIntegral $ B.length $ cmsgData cmsg
+        cmsghdr = CMsgHdr { cmsghdrLen = fromIntegral $ cmsgLen cmsg
                           , cmsghdrLevel = fromIntegral $ cmsgLevel cmsg
                           , cmsghdrType = fromIntegral $ cmsgType cmsg }
+
+pokeCMsgs :: Ptr MsgHdr -> [CMsg] -> IO ()
+pokeCMsgs pMsg cmsgs = do
+        msg <- peek pMsg
+        cLen <- pokeCMsgs' (c_cmsg_firsthdr pMsg) cmsgs
+        poke pMsg $ msg { msgControlLen = fromIntegral cLen }
+    where
+        pokeCMsgs' :: Ptr CMsgHdr -> [CMsg] -> IO Int
+        pokeCMsgs' _ [] = return 0
+        pokeCMsgs' pCMsg (c:cs) = do
+                pokeCMsg pCMsg c
+                ((+)$cmsgSpace c) <$> pokeCMsgs' (c_cmsg_nexthdr pMsg pCMsg) cs
