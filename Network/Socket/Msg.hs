@@ -73,8 +73,8 @@ sendMsg sock@(MkSocket sockfd _ _ _ _) bytes sa cmsgs = allocaBytes bufSz $ \buf
 -- |Receive data and put it into a bytestring.
 recvMsg :: Socket -> Int -> IO (B.ByteString, SockAddr, [CMsg])
 recvMsg sock@(MkSocket sockfd _ _ _ _) sz = allocaBytes bufSz $ \bufPtr -> do
-        let addrPtr = plusPtr bufPtr addrSz
-        let iovPtr = plusPtr addrPtr sz
+        let addrPtr = plusPtr bufPtr sz
+        let iovPtr = plusPtr addrPtr addrSz
         let mhdrPtr = plusPtr iovPtr (sizeOf (undefined :: IOVec))
         let auxPtr = plusPtr mhdrPtr (sizeOf (undefined :: MsgHdr))
 
