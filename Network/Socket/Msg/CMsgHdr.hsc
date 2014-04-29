@@ -23,6 +23,7 @@ import Control.Applicative
 import qualified Data.ByteString as B
 import Data.Maybe (isNothing,fromJust)
 import Foreign.C.Types (CUInt(..),CInt(..),CSize(..))
+import Foreign.Marshal.Unsafe (unsafeLocalState)
 import Foreign.Marshal.Utils (copyBytes)
 import Foreign.Ptr (Ptr,castPtr,nullPtr)
 import Foreign.Storable (Storable(..))
@@ -54,13 +55,22 @@ instance Storable CMsgHdr where
 -- are constant and thus we do not have to use IO monad.
 
 foreign import ccall unsafe "cmsg_firsthdr"
-  c_cmsg_firsthdr :: Ptr MsgHdr -> Ptr CMsgHdr
+  _c_cmsg_firsthdr :: Ptr MsgHdr -> IO (Ptr CMsgHdr)
 
 foreign import ccall unsafe "cmsg_nexthdr"
-  c_cmsg_nexthdr :: Ptr MsgHdr -> Ptr CMsgHdr -> Ptr CMsgHdr
+  _c_cmsg_nexthdr :: Ptr MsgHdr -> Ptr CMsgHdr -> IO (Ptr CMsgHdr)
 
 foreign import ccall unsafe "cmsg_data"
-  c_cmsg_data :: Ptr CMsgHdr -> Ptr ()
+  _c_cmsg_data :: Ptr CMsgHdr -> IO (Ptr ())
+
+c_cmsg_firsthdr :: Ptr MsgHdr -> Ptr CMsgHdr
+c_cmsg_firsthdr = unsafeLocalState . _c_cmsg_firsthdr
+
+c_cmsg_nexthdr :: Ptr MsgHdr -> Ptr CMsgHdr -> Ptr CMsgHdr
+c_cmsg_nexthdr pm = unsafeLocalState . _c_cmsg_nexthdr pm
+
+c_cmsg_data :: Ptr CMsgHdr -> Ptr ()
+c_cmsg_data = unsafeLocalState . _c_cmsg_data
 
 foreign import ccall unsafe "cmsg_space"
   c_cmsg_space :: CSize -> CSize
