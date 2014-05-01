@@ -11,8 +11,8 @@ import Foreign.Storable (Storable(..))
 #include <sys/uio.h>
 
 data IOVec = IOVec
-    { iovBase :: Ptr CChar
-    , iovLen :: CSize
+    { iovBase :: !(Ptr CChar)
+    , iovLen :: !CSize
     }
 
 instance Storable IOVec where
@@ -22,7 +22,7 @@ instance Storable IOVec where
   peek p = do
     base <- (#peek struct iovec, iov_base) p
     len <- (#peek struct iovec, iov_len) p
-    return $ IOVec base len
+    return $! IOVec base len
 
   poke p iov = do
     (#poke struct iovec, iov_base) p (iovBase iov)

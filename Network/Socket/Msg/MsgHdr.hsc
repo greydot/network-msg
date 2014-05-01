@@ -19,13 +19,13 @@ import Network.Socket (SockAddr)
 import Network.Socket.Msg.IOVec (IOVec)
 
 data MsgHdr = MsgHdr
-    { msgName       :: Ptr SockAddr
-    , msgNameLen    :: CSize
-    , msgIov        :: Ptr IOVec
-    , msgIovLen     :: CSize
-    , msgControl    :: Ptr ()
-    , msgControlLen :: CSize
-    , msgFlags      :: CInt
+    { msgName       :: !(Ptr SockAddr)
+    , msgNameLen    :: !CSize
+    , msgIov        :: !(Ptr IOVec)
+    , msgIovLen     :: !CSize
+    , msgControl    :: !(Ptr ())
+    , msgControlLen :: !CSize
+    , msgFlags      :: !CInt
     }
 
 instance Storable MsgHdr where
@@ -40,7 +40,7 @@ instance Storable MsgHdr where
     control <- (#peek struct msghdr, msg_control) p
     controlLen <- (#peek struct msghdr, msg_controllen) p
     flags <- (#peek struct msghdr, msg_flags) p
-    return $ MsgHdr name nameLen iov iovLen control controlLen flags
+    return $! MsgHdr name nameLen iov iovLen control controlLen flags
 
   poke p mh = do
     (#poke struct msghdr, msg_name) p (msgName mh)

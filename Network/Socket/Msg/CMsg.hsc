@@ -20,9 +20,9 @@ import Data.ByteString.Lazy (fromStrict,toStrict)
 import Network.Socket (HostAddress)
 
 data CMsg = CMsg
-    { cmsgLevel :: Int
-    , cmsgType  :: Int
-    , cmsgData  :: B.ByteString
+    { cmsgLevel :: !Int
+    , cmsgType  :: !Int
+    , cmsgData  :: !B.ByteString
     }
 
 instance Show CMsg where
@@ -61,9 +61,9 @@ filterCMsgs x = filter $ \c -> (cmsgType c == getCMsgType x) && (cmsgLevel c == 
 
 #ifdef IP_PKTINFO
 data IpPktInfo = IpPktInfo
-    { ipi_ifindex   :: Word32
-    , ipi_spec_dst  :: HostAddress
-    , ipi_addr      :: HostAddress
+    { ipi_ifindex   :: !Word32
+    , ipi_spec_dst  :: !HostAddress
+    , ipi_addr      :: !HostAddress
     } deriving (Show)
 
 instance Binary IpPktInfo where

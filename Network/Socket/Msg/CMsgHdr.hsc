@@ -31,9 +31,9 @@ import Foreign.Storable (Storable(..))
 type CSockLen = CUInt   -- The way it is defined somewhere in bits/types.h
 
 data CMsgHdr = CMsgHdr
-    { cmsghdrLen       :: CSockLen
-    , cmsghdrLevel  :: CInt
-    , cmsghdrType   :: CInt
+    { cmsghdrLen       :: !CSockLen
+    , cmsghdrLevel  :: !CInt
+    , cmsghdrType   :: !CInt
     }
 
 instance Storable CMsgHdr where
