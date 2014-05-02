@@ -34,7 +34,7 @@ data CMsgHdr = CMsgHdr
     { cmsghdrLen       :: !CSockLen
     , cmsghdrLevel  :: !CInt
     , cmsghdrType   :: !CInt
-    }
+    } deriving (Show)
 
 instance Storable CMsgHdr where
     sizeOf _ = (#const sizeof(struct cmsghdr))

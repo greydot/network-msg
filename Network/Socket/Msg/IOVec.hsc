@@ -13,7 +13,7 @@ import Foreign.Storable (Storable(..))
 data IOVec = IOVec
     { iovBase :: !(Ptr CChar)
     , iovLen :: !CSize
-    }
+    } deriving (Show)
 
 instance Storable IOVec where
   sizeOf _ = (#const sizeof(struct iovec))

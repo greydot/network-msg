@@ -26,7 +26,7 @@ data MsgHdr = MsgHdr
     , msgControl    :: !(Ptr ())
     , msgControlLen :: !CSize
     , msgFlags      :: !CInt
-    }
+    } deriving (Show)
 
 instance Storable MsgHdr where
   sizeOf _ = (#const sizeof(struct msghdr))
