@@ -29,7 +29,7 @@ library
     unix
 
   extensions: CPP, ForeignFunctionInterface
-  ghc-options: -Wall -fwarn-tabs -O2
+  ghc-options: -Wall -fwarn-tabs
 
 source-repository head
   type: git
