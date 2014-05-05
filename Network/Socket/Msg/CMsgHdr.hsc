@@ -21,6 +21,7 @@ import Network.Socket.Msg.MsgHdr (MsgHdr(..))
 
 import Control.Applicative
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Unsafe as BU
 import Data.Maybe (isNothing,fromJust)
 import Foreign.C.Types (CUInt(..),CInt(..),CSize(..))
 import Foreign.Marshal.Unsafe (unsafeLocalState)
@@ -108,7 +109,7 @@ pokeCMsg :: Ptr CMsgHdr -> CMsg -> IO ()
 pokeCMsg pHdr cmsg = do
         poke pHdr cmsghdr
         let dptr = castPtr $ c_cmsg_data pHdr
-        B.useAsCStringLen (cmsgData cmsg) $ \(bptr,len) -> copyBytes dptr bptr len
+        BU.unsafeUseAsCStringLen (cmsgData cmsg) $ \(bptr,len) -> copyBytes dptr bptr len
     where
         cmsghdr = CMsgHdr { cmsghdrLen = fromIntegral $ cmsgLen cmsg
                           , cmsghdrLevel = fromIntegral $ cmsgLevel cmsg

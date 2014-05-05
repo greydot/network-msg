@@ -15,6 +15,7 @@ import Network.Socket.Msg.MsgHdr
 import Control.Applicative
 import Control.Monad (void)
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Unsafe as BU
 import Data.Maybe (isNothing, fromJust)
 import Network.Socket
 import Network.Socket.Internal (peekSockAddr,pokeSockAddr,sizeOfSockAddr,throwSocketErrorWaitRead,throwSocketErrorWaitWrite)
@@ -43,31 +44,28 @@ The buffer in both functions is filled as follows:
 -- |Sends the data contained in the bytestring to the specified address.
 -- The last argument is a list of control parameters (see cmsg(3) for details).
 sendMsg :: Socket -> B.ByteString -> SockAddr -> [CMsg] -> IO ()
-sendMsg sock@(MkSocket sockfd _ _ _ _) bytes sa cmsgs = allocaBytes bufSz $ \bufPtr -> do
+sendMsg sock@(MkSocket sockfd _ _ _ _) bytes sa cmsgs = void $ allocaBytes bufSz $ \bufPtr -> do
         zeroBytes bufPtr bufSz
-
         let saPtr = castPtr bufPtr
         let iovPtr = plusPtr saPtr $ sizeOfSockAddr sa
         let msgPtr = plusPtr iovPtr $ sizeOf (undefined :: IOVec)
         let auxPtr = plusPtr msgPtr $ sizeOf (undefined :: MsgHdr)
 
-        let msghdr = MsgHdr { msgName = saPtr
-                            , msgNameLen = fromIntegral $ sizeOfSockAddr sa
-                            , msgIov = iovPtr
-                            , msgIovLen = 1
-                            , msgControl = auxPtr
-                            , msgControlLen = fromIntegral auxSz
-                            , msgFlags = 0 }
-        poke msgPtr msghdr
+        poke msgPtr MsgHdr { msgName = saPtr
+                           , msgNameLen = fromIntegral $ sizeOfSockAddr sa
+                           , msgIov = iovPtr
+                           , msgIovLen = 1
+                           , msgControl = auxPtr
+                           , msgControlLen = fromIntegral auxSz
+                           , msgFlags = 0 }
         pokeCMsgs msgPtr cmsgs
         pokeSockAddr saPtr sa
 
-        void $
 # if !defined(__HUGS__) 
-            throwSocketErrorWaitWrite sock "sendMsg" $
+        throwSocketErrorWaitWrite sock "sendMsg" $
 # endif
-                B.useAsCStringLen bytes $ \(p,len) ->
-                    poke iovPtr (IOVec p $ fromIntegral len) >> c_sendmsg sockfd msgPtr 0
+            BU.unsafeUseAsCStringLen bytes $ \(p,len) ->
+                poke iovPtr (IOVec p $ fromIntegral len) >> c_sendmsg sockfd msgPtr 0
     where
         auxSz = sum $ map cmsgSpace cmsgs
         bufSz = sum [auxSz, sizeOfSockAddr sa, sizeOf (undefined :: MsgHdr), sizeOf (undefined :: IOVec)]
