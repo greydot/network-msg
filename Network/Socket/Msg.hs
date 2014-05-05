@@ -45,7 +45,6 @@ The buffer in both functions is filled as follows:
 -- The last argument is a list of control parameters (see cmsg(3) for details).
 sendMsg :: Socket -> B.ByteString -> SockAddr -> [CMsg] -> IO ()
 sendMsg sock@(MkSocket sockfd _ _ _ _) bytes sa cmsgs = void $ allocaBytes bufSz $ \bufPtr -> do
-        zeroBytes bufPtr bufSz
         let saPtr = castPtr bufPtr
         let iovPtr = plusPtr saPtr $ sizeOfSockAddr sa
         let msgPtr = plusPtr iovPtr $ sizeOf (undefined :: IOVec)

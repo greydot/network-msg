@@ -41,14 +41,29 @@ instance Storable CMsgHdr where
     sizeOf _ = (#const sizeof(struct cmsghdr))
     alignment _ = alignment (undefined :: CInt)
 
+    -- XXX: The following ifdefs are needed because on Linux
+    -- cmsg_len has type size_t which is twice as large as
+    -- socklen_t.
+    -- And as always I thank linux developers for both excellent
+    -- documentation and standard compliance. Motherfuckers.
+
     peek p = do
+# if linux_HOST_OS == 1
+        len <- fmap fromIntegral
+            ( ((#peek struct cmsghdr, cmsg_len) $ castPtr p) :: IO CSize )
+# else
         len <- (#peek struct cmsghdr, cmsg_len) p
+# endif
         level <- (#peek struct cmsghdr, cmsg_level) p
         t <- (#peek struct cmsghdr, cmsg_type) p
-        return $ CMsgHdr len level t
+        return $! CMsgHdr len level t
 
     poke p cmh = do
+# if linux_HOST_OS == 1
+        (#poke struct cmsghdr, cmsg_len) (castPtr p) (fromIntegral $ cmsghdrLen cmh :: CSize)
+# else
         (#poke struct cmsghdr, cmsg_len) p (cmsghdrLen cmh)
+# endif
         (#poke struct cmsghdr, cmsg_level) p (cmsghdrLevel cmh)
         (#poke struct cmsghdr, cmsg_type) p (cmsghdrType cmh)
 
