@@ -11,8 +11,8 @@ import Foreign.C.Types (CInt(..))
 import Foreign.Ptr (Ptr)
 import System.Posix.Types (CSsize(..))
 
-foreign import ccall unsafe "sendmsg"
+foreign import ccall "sendmsg"
   c_sendmsg :: CInt -> Ptr MsgHdr -> CInt -> IO CSsize
 
-foreign import ccall unsafe "recvmsg"
+foreign import ccall "recvmsg"
   c_recvmsg :: CInt -> Ptr MsgHdr -> CInt -> IO CSsize
