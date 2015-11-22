@@ -1,5 +1,5 @@
 name: network-msg
-version: 0.6
+version: 0.7
 category: Network
 build-type: Simple 
 cabal-version: >= 1.6
