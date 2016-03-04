@@ -106,9 +106,10 @@ cmsgExtractData :: Ptr CMsgHdr -> IO (Maybe B.ByteString)
 cmsgExtractData p = do
     let dataPtr = castPtr $ c_cmsg_data p
     dataLen <- cmsghdrLen <$> peek p
+    let dataSize = (fromIntegral dataLen) - (fromIntegral $ c_cmsg_len 0)
     if dataPtr == nullPtr
         then return Nothing
-        else return.Just =<< B.packCStringLen (dataPtr, fromIntegral dataLen)
+        else return.Just =<< B.packCStringLen (dataPtr, dataSize)
 
 peekCMsg :: Ptr CMsgHdr -> IO (Maybe CMsg)
 peekCMsg pCMsgHdr =
