@@ -6,11 +6,14 @@
 
 module Network.Socket.Msg.MsgHdr
   ( MsgHdr(..)
+  , MMsgHdr(..)
   ) where
 
+#define _GNU_SOURCE
 #include <sys/types.h>
 #include <sys/socket.h>
 
+import Control.Applicative
 import Foreign.C.Types (CInt, CSize)
 import Foreign.Ptr (Ptr)
 import Foreign.Storable (Storable(..))
@@ -50,3 +53,18 @@ instance Storable MsgHdr where
     (#poke struct msghdr, msg_control) p (msgControl mh)
     (#poke struct msghdr, msg_controllen) p (msgControlLen mh)
     (#poke struct msghdr, msg_flags) p (msgFlags mh)
+
+data MMsgHdr = MMsgHdr
+    { msgHdr :: MsgHdr
+    , msgLen :: CInt
+    } deriving (Show)
+
+instance Storable MMsgHdr where
+  sizeOf _ = (#const sizeof (struct mmsghdr))
+  alignment _ = alignment (undefined :: CInt)
+
+  peek p = MMsgHdr <$> (#peek struct mmsghdr, msg_hdr) p
+                   <*> (#peek struct mmsghdr, msg_len) p
+  poke p mmh = do
+    (#poke struct mmsghdr, msg_hdr) p (msgHdr mmh)
+    (#poke struct mmsghdr, msg_len) p (msgLen mmh)

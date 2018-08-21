@@ -32,7 +32,7 @@ instance Show CMsg where
                         "Data: ", show $ cmsgData cmsg, ")"]
 
 -- |Class for binary structures that can be used as control messages (cmsg(3)).
--- 
+--
 -- Complete definition requires for a type to be an instance of Binary class,
 -- as well as to provide getCMsgLevel and getCMsgType methods.
 --
@@ -54,7 +54,7 @@ class Binary a => CMsgable a where
                         Right (_,_,x) -> Just x
 
 -- |Filter specific kind of control messages.
--- 
+--
 -- Example: filterCMsgs (undefined :: IpPktInfo) cmsgs
 filterCMsgs :: (CMsgable a) => a -> [CMsg] -> [CMsg]
 filterCMsgs x = filter $ \c -> (cmsgType c == getCMsgType x) && (cmsgLevel c == getCMsgLevel x)

@@ -4,6 +4,7 @@ module Network.Socket.Msg
     , filterCMsgs
     , sendMsg
     , recvMsg
+    , sendMMsg
     ) where
 
 import Network.Socket.Msg.CMsg
@@ -14,9 +15,9 @@ import Network.Socket.Msg.MsgHdr
 
 import Control.Applicative
 import Control.Monad (void)
+import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Unsafe as BU
-import Data.Maybe (isNothing, fromJust)
 import Network.Socket
 import Network.Socket.Internal (peekSockAddr,pokeSockAddr,sizeOfSockAddr,throwSocketErrorWaitRead,throwSocketErrorWaitWrite)
 import Foreign.Marshal.Alloc (allocaBytes)
@@ -43,7 +44,7 @@ The buffer in both functions is filled as follows:
 
 -- |Sends the data contained in the bytestring to the specified address.
 -- The last argument is a list of control parameters (see cmsg(3) for details).
-sendMsg :: Socket -> B.ByteString -> SockAddr -> [CMsg] -> IO ()
+sendMsg :: Socket -> ByteString -> SockAddr -> [CMsg] -> IO ()
 sendMsg sock@(MkSocket sockfd _ _ _ _) bytes sa cmsgs = void $ allocaBytes bufSz $ \bufPtr -> do
         let saPtr = castPtr bufPtr
         let iovPtr = plusPtr saPtr $ sizeOfSockAddr sa
@@ -60,7 +61,7 @@ sendMsg sock@(MkSocket sockfd _ _ _ _) bytes sa cmsgs = void $ allocaBytes bufSz
         pokeCMsgs msgPtr cmsgs
         pokeSockAddr saPtr sa
 
-# if !defined(__HUGS__) 
+# if !defined(__HUGS__)
         throwSocketErrorWaitWrite sock "sendMsg" $
 # endif
             BU.unsafeUseAsCStringLen bytes $ \(p,len) ->
@@ -70,7 +71,7 @@ sendMsg sock@(MkSocket sockfd _ _ _ _) bytes sa cmsgs = void $ allocaBytes bufSz
         bufSz = sum [auxSz, sizeOfSockAddr sa, sizeOf (undefined :: MsgHdr), sizeOf (undefined :: IOVec)]
 
 -- |Receive data and put it into a bytestring.
-recvMsg :: Socket -> Int -> IO (B.ByteString, SockAddr, [CMsg])
+recvMsg :: Socket -> Int -> IO (ByteString, SockAddr, [CMsg])
 recvMsg sock@(MkSocket sockfd _ _ _ _) sz = allocaBytes bufSz $ \bufPtr -> do
         let addrPtr = plusPtr bufPtr sz
         let iovPtr = plusPtr addrPtr addrSz
@@ -78,7 +79,7 @@ recvMsg sock@(MkSocket sockfd _ _ _ _) sz = allocaBytes bufSz $ \bufPtr -> do
         let auxPtr = plusPtr mhdrPtr (sizeOf (undefined :: MsgHdr))
 
         let iov = IOVec bufPtr (fromIntegral sz)
-        let msghdr = MsgHdr { msgName = addrPtr 
+        let msghdr = MsgHdr { msgName = addrPtr
                             , msgNameLen = fromIntegral addrSz
                             , msgIov = iovPtr
                             , msgIovLen = 1
@@ -89,7 +90,7 @@ recvMsg sock@(MkSocket sockfd _ _ _ _) sz = allocaBytes bufSz $ \bufPtr -> do
         poke mhdrPtr msghdr
 
         rsz <- fmap fromIntegral (
-# if !defined(__HUGS__) 
+# if !defined(__HUGS__)
             throwSocketErrorWaitRead sock "recvMsg" $
 # endif
             c_recvmsg sockfd mhdrPtr 0)
@@ -103,14 +104,45 @@ recvMsg sock@(MkSocket sockfd _ _ _ _) sz = allocaBytes bufSz $ \bufPtr -> do
         addrSz = 16
         bufSz = sum [sz, auxSz, addrSz, sizeOf (undefined :: MsgHdr), sizeOf (undefined :: IOVec)]
 
+sendMMsg :: Socket -> [(ByteString, SockAddr, [CMsg])] -> IO ()
+sendMMsg sock dat = void $ allocaBytes (numMsgs * sizeOf (undefined :: MMsgHdr)) $ \mmsgBuf ->
+                                                                                     pokeAndSend mmsgBuf 0 dat
+
+  where
+    numMsgs = length dat
+    pokeAndSend ptr _ [] = throwSocketErrorWaitWrite sock "sendMMsg" $
+                             c_sendmmsg (fdSocket sock) ptr (fromIntegral numMsgs) 0
+    pokeAndSend ptr n ((bytes, sa, cmsgs):rest) = let auxSz = sum (map cmsgSpace cmsgs)
+                                                      sz = auxSz + sizeOf (undefined :: IOVec) + sizeOfSockAddr sa
+                                                  in allocaBytes sz $ \bufPtr ->
+                                                       BU.unsafeUseAsCStringLen bytes $ \(datPtr, datLen) -> do
+                                                         let iovPtr = castPtr bufPtr
+                                                             saPtr = iovPtr `plusPtr` sizeOf (undefined :: IOVec)
+                                                             auxPtr = saPtr `plusPtr` sizeOfSockAddr sa
+                                                             mmsgPtr = ptr `plusPtr` (n * sizeOf (undefined :: MMsgHdr))
+                                                         pokeSockAddr saPtr sa
+                                                         poke iovPtr (IOVec datPtr $ fromIntegral datLen)
+                                                         poke mmsgPtr $ MMsgHdr (MsgHdr { msgName = saPtr
+                                                                                        , msgNameLen = fromIntegral $ sizeOfSockAddr sa
+                                                                                        , msgIov = iovPtr
+                                                                                        , msgIovLen = 1
+                                                                                        , msgControl = auxPtr
+                                                                                        , msgControlLen = fromIntegral auxSz
+                                                                                        , msgFlags = 0
+                                                                                        }) 0
+                                                         pokeCMsgs (castPtr mmsgPtr) cmsgs
+                                                         pokeAndSend ptr (n + 1) rest
+
+
+
 extractCMsgs :: Ptr MsgHdr -> IO [CMsg]
 extractCMsgs pMsg = extractCMsgs' (c_cmsg_firsthdr pMsg) []
     where
         extractCMsgs' pCMsg resList
             | isNullPtr pCMsg = return resList
             | otherwise = do
-                cmsg <- peekCMsg pCMsg
+                mcmsg <- peekCMsg pCMsg
                 extractCMsgs' (c_cmsg_nexthdr pMsg pCMsg)
-                              (if isNothing cmsg
-                                  then resList
-                                  else (fromJust cmsg):resList)
+                              (case mcmsg of
+                                  Nothing -> resList
+                                  Just cmsg -> cmsg:resList)
