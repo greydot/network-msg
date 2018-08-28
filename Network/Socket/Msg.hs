@@ -5,6 +5,7 @@ module Network.Socket.Msg
     , sendMsg
     , recvMsg
     , sendMMsg
+    , recvMMsg
     ) where
 
 import Network.Socket.Msg.CMsg
@@ -18,6 +19,8 @@ import Control.Monad (void)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Unsafe as BU
+import Data.Foldable (for_)
+import Data.Traversable (for)
 import Network.Socket
 import Network.Socket.Internal (peekSockAddr,pokeSockAddr,sizeOfSockAddr,throwSocketErrorWaitRead,throwSocketErrorWaitWrite)
 import Foreign.Marshal.Alloc (allocaBytes)
@@ -133,7 +136,53 @@ sendMMsg sock dat = void $ allocaBytes (numMsgs * sizeOf (undefined :: MMsgHdr))
                                                          pokeCMsgs (castPtr mmsgPtr) cmsgs
                                                          pokeAndSend ptr (n + 1) rest
 
-
+recvMMsg :: Socket -> Int -> Int -> IO [(ByteString, SockAddr, [CMsg])]
+recvMMsg sock maxNum maxSz = allocaBytes bufSz $ \bufPtr -> do
+                               for_ [0..maxNum-1] $ \n ->
+                                 let iovp = iovPtr n $ castPtr bufPtr
+                                     mmsg = MMsgHdr (MsgHdr { msgName = addrPtr n $ castPtr bufPtr
+                                                            , msgNameLen = fromIntegral addrSz
+                                                            , msgIov = iovp
+                                                            , msgIovLen = 1
+                                                            , msgControl = auxPtr n $ castPtr bufPtr
+                                                            , msgControlLen = fromIntegral auxSz
+                                                            , msgFlags = 0
+                                                            }) 0
+                                     iov = IOVec (datPtr n $ castPtr bufPtr) $ fromIntegral maxSz
+                                 in poke iovp iov >> poke (mmsgPtr n bufPtr) mmsg
+                               retNum <- throwSocketErrorWaitRead sock "recvMMsg" $
+                                 c_recvmmsg (fdSocket sock) bufPtr (fromIntegral maxNum) flag_MSG_DONTWAIT nullPtr
+                               for [0..fromIntegral retNum - 1] $ \n -> do
+                                 let mmsgp = mmsgPtr n bufPtr
+                                 MMsgHdr msghdr datLen <- peek mmsgp
+                                 IOVec dat _ <- peek (msgIov msghdr)
+                                 cmsgs <- extractCMsgs (castPtr mmsgp)
+                                 bs <- B.packCStringLen (dat, fromIntegral datLen)
+                                 sa <- peekSockAddr (msgName msghdr)
+                                 pure (bs, sa, cmsgs)
+  where
+    auxSz = 1024
+    addrSz = 16  -- Reserve 16 bytes for peer address
+    bufSz = maxNum * sum [ sizeOf (undefined :: MMsgHdr)
+                         , sizeOf (undefined :: IOVec)
+                         , addrSz
+                         , auxSz
+                         , maxSz
+                         ]
+    mmsgPtr n ptr = ptr `plusPtr` (sizeOf (undefined :: MMsgHdr) * n)
+    addrPtr n ptr = ptr `plusPtr` (sizeOf (undefined :: MMsgHdr) * maxNum + addrSz * n)
+    iovPtr n ptr = ptr `plusPtr` (maxNum * sum [ sizeOf (undefined :: MMsgHdr)
+                                               , addrSz
+                                               ] + sizeOf (undefined :: IOVec) * n)
+    auxPtr n ptr = ptr `plusPtr` (maxNum * sum [ sizeOf (undefined :: MMsgHdr)
+                                               , addrSz
+                                               , sizeOf (undefined :: IOVec)
+                                               ] + auxSz * n)
+    datPtr n ptr = ptr `plusPtr` (maxNum * sum [ sizeOf (undefined :: MMsgHdr)
+                                               , addrSz
+                                               , sizeOf (undefined :: IOVec)
+                                               , auxSz
+                                               ] + maxSz * n)
 
 extractCMsgs :: Ptr MsgHdr -> IO [CMsg]
 extractCMsgs pMsg = extractCMsgs' (c_cmsg_firsthdr pMsg) []

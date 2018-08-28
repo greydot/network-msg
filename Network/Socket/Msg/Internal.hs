@@ -4,6 +4,7 @@ module Network.Socket.Msg.Internal
     ( c_sendmsg
     , c_recvmsg
     , c_sendmmsg
+    , c_recvmmsg
     ) where
 
 import Network.Socket.Msg.MsgHdr (MsgHdr,MMsgHdr)
@@ -20,3 +21,6 @@ foreign import ccall "recvmsg"
 
 foreign import ccall "sendmmsg"
   c_sendmmsg :: CInt -> Ptr MMsgHdr -> CUInt -> CInt -> IO CInt
+
+foreign import ccall "recvmmsg"
+  c_recvmmsg :: CInt -> Ptr MMsgHdr -> CUInt -> CInt -> Ptr () -> IO CInt

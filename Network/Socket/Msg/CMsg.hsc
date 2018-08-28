@@ -6,6 +6,7 @@ module Network.Socket.Msg.CMsg
 #ifdef IP_PKTINFO
     , IpPktInfo(..)
 #endif
+    , flag_MSG_DONTWAIT
     ) where
 
 #include <sys/socket.h>
@@ -17,6 +18,7 @@ import Data.Binary.Get (getWord32host)
 import Data.Binary.Put (putWord32host)
 import qualified Data.ByteString as B
 import Data.ByteString.Lazy (fromStrict,toStrict)
+import Foreign.C.Types (CInt)
 import Network.Socket (HostAddress)
 
 data CMsg = CMsg
@@ -81,3 +83,6 @@ instance CMsgable IpPktInfo where
     getCMsgType     _ = #const IP_PKTINFO
 
 # endif
+
+flag_MSG_DONTWAIT :: CInt
+flag_MSG_DONTWAIT = #const MSG_DONTWAIT
